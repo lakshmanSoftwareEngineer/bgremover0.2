@@ -27,49 +27,22 @@ def health_status():
     """Detailed health status"""
     return {'status': 'healthy', 'service': 'background-remover', 'message': 'POST image to /upload endpoint'}, 200
 
-@app.route('/upload', methods=['POST'])
+@app.route('/upload', methods=['GET', 'POST'])
 def upload_image():
-    """Upload and process image to remove background"""
-    try:
-        # Check if request has data
-        if not request.data:
-            logger.warning("No image data in request")
-            return {'error': 'No image data provided'}, 400
-        
-        # Process the image
-        img_data = io.BytesIO(request.data)
-        
+    if request.method == 'POST':
+        if 'image' not in request.files:
+            return 'No image uploaded', 400
+        file = request.files['image']
         try:
-            input_image = Image.open(img_data)
-            logger.info(f"Processing image: {input_image.size}, mode: {input_image.mode}")
+            input_image = Image.open(file.stream)
         except Exception as e:
-            logger.error(f"Invalid image format: {e}")
-            return {'error': f'Invalid image format: {str(e)}'}, 400
-        
-        # Remove background
-        try:
-            output_image = rembg.remove(input_image)
-            logger.info("Background removal completed")
-        except Exception as e:
-            logger.error(f"Background removal failed: {e}")
-            return {'error': f'Background removal failed: {str(e)}'}, 500
-        
-        # Prepare response
+            return f"Invalid image file: {e}", 400
+        output_image = rembg.remove(input_image)
+        output_image.save("output.png")
         img_io = io.BytesIO()
         output_image.save(img_io, 'PNG')
         img_io.seek(0)
-        
-        return send_file(
-            img_io, 
-            mimetype='image/png',
-            as_attachment=False,
-            download_name='background_removed.png'
-        )
-        
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        return {'error': 'Internal server error'}, 500
-
+        return send_file(img_io, mimetype='image/png')
 @app.errorhandler(413)
 def too_large(e):
     """Handle file too large error"""
@@ -89,3 +62,4 @@ def internal_error(e):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
